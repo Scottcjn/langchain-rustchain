@@ -9,6 +9,9 @@ from rustchain_langchain import (
     summarize_payouts,
     summarize_miners,
     summarize_health,
+    summarize_epoch,
+    summarize_hall_of_fame,
+    summarize_bounties,
 )
 
 
@@ -103,3 +106,72 @@ def test_tool_run_summarizes_on_success():
     with mock.patch("rustchain_langchain.client.requests.get", return_value=_Resp(payload)):
         out = tool._run()
     assert "66,531+ RTC paid" in out
+
+
+def test_summarize_epoch():
+    s = summarize_epoch({
+        "blocks_per_epoch": 144, "enrolled_miners": 24, "epoch": 195,
+        "epoch_pot": 1.5, "slot": 28190, "total_supply_rtc": 8388608,
+    })
+    assert "epoch 195" in s
+    assert "slot 28190" in s
+    assert "24 miner(s) enrolled" in s
+    assert "8388608 RTC" in s
+
+
+def test_summarize_hall_of_fame_ranks_machines():
+    data = {"leaderboard": [
+        {"rank": 1, "device_model": "PowerPC 7450 (G4) @ 733MHz", "manufacture_year": 2001,
+         "rust_score": 1178.45, "total_attestations": 868457, "badge": "Oxidized Legend"},
+        {"rank": 2, "device_model": "Mac", "rust_score": 900.0, "total_attestations": 5000},
+    ]}
+    s = summarize_hall_of_fame(data, top=1)
+    assert "top 1" in s
+    assert "#1 PowerPC 7450 (G4) @ 733MHz, 2001" in s
+    assert "Oxidized Legend" in s
+    # only the requested top slice is rendered
+    assert "#2 Mac" not in s
+
+
+def test_summarize_hall_of_fame_empty():
+    assert "no machines" in summarize_hall_of_fame({"leaderboard": []})
+    assert "no machines" in summarize_hall_of_fame("garbage")
+
+
+def test_summarize_bounties_sorts_and_totals():
+    issues = [
+        {"number": 1, "title": "[BOUNTY: 5 RTC] Small fix"},
+        {"number": 2, "title": "[BOUNTY: 50-200 RTC] Big video"},
+        {"number": 3, "title": "[BOUNTY] feverdream client", "body": "pays 10 RTC on merge"},
+        {"number": 4, "title": "PR for wallet RTC5f3aabbcc"},  # wallet addr, no reward
+    ]
+    s = summarize_bounties(issues, top=2)
+    assert "4 open RustChain bounties" in s
+    # 200 (range upper) + 5 + 10 + 0 = 215
+    assert "~215 RTC" in s
+    # sorted by reward desc: #2 (200) then #3 (10); top=2 excludes #1/#4
+    assert s.index("#2") < s.index("#3")
+    assert "#1" not in s and "#4" not in s
+    # the wallet-only issue must not be mistaken for a reward
+    assert "RTC5f3aabbcc" not in s
+
+
+def test_summarize_bounties_filters_pull_requests_and_empty():
+    assert "no open bounties" in summarize_bounties([])
+    only_pr = [{"number": 9, "title": "[BOUNTY: 5 RTC] x", "pull_request": {"url": "y"}}]
+    assert "no open bounties" in summarize_bounties(only_pr)
+
+
+def test_bounties_client_builds_github_url_and_drops_prs():
+    c = RustChainClient()
+    payload = [
+        {"number": 1, "title": "a"},
+        {"number": 2, "title": "b", "pull_request": {"url": "x"}},
+    ]
+    with mock.patch("rustchain_langchain.client.requests.get", return_value=_Resp(payload)) as g:
+        out = c.bounties()
+    called_url = g.call_args[0][0]
+    assert called_url == "https://api.github.com/repos/Scottcjn/rustchain-bounties/issues"
+    assert g.call_args.kwargs["params"]["labels"] == "bounty"
+    assert g.call_args.kwargs["params"]["state"] == "open"
+    assert [i["number"] for i in out] == [1]  # PR filtered out
