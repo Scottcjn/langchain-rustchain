@@ -103,6 +103,61 @@ def summarize_bounties(items) -> str:
     return "\n".join(lines)
 
 
+def summarize_provenance(data: dict) -> str:
+    """Render RIP-0310 Proof-of-Provenance status for a Beacon agent id.
+
+    Faithful to the spec's stated per-layer deployment status: the Agent
+    (identity) and Economic layers are live and surfaced here; the Hardware
+    layer is a precondition that lives on the RustChain node; the Content
+    binding is specified but not yet deployed. We never overclaim a VERIFIED
+    content binding that the live API does not expose.
+    """
+    aid = data.get("agent_id", "?")
+    if not data.get("found"):
+        n = data.get("registered_agents", "?")
+        return (
+            f"No Beacon agent found for id '{aid}'. RIP-0310 provenance needs a "
+            f"registered identity (id 'bcn_<hex>'); {n} agents are registered in "
+            f"the Beacon atlas. Check the id, or list agents first."
+        )
+
+    ident = data.get("identity") or {}
+    name = ident.get("name", "?")
+    status = ident.get("status", "?")
+    relay = ident.get("relay", False)
+    model = ident.get("model_id") or ident.get("provider_name") or ident.get("provider") or "?"
+    caps = ident.get("capabilities")
+    contracts = data.get("contracts") or []
+
+    lines = [f"Provenance for Beacon agent {ident.get('agent_id', aid)} (RIP-0310 Proof-of-Provenance):"]
+    cap_str = f", capabilities: {', '.join(caps)}" if isinstance(caps, list) and caps else ""
+    lines.append(
+        f"- Agent layer: IDENTITY PRESENT — \"{name}\", status {status}, "
+        f"model {model}, relay={relay}{cap_str} "
+        f"(Beacon agent.json / bcn_ identity; RIP-0310 rates the Agent layer \"partial\")."
+    )
+    if contracts:
+        c0 = contracts[0]
+        more = f" (+{len(contracts) - 1} more)" if len(contracts) > 1 else ""
+        lines.append(
+            f"- Economic layer: {len(contracts)} Beacon contract(s) on record — e.g. "
+            f"{c0.get('id')} {c0.get('type')} {c0.get('amount')} {c0.get('currency')} "
+            f"{c0.get('state')} as {c0.get('role')} with {c0.get('counterparty')}{more}."
+        )
+    else:
+        lines.append("- Economic layer: no Beacon contracts on record for this agent.")
+    lines.append(
+        "- Hardware layer: not exposed via Beacon — PoA hardware attestation is a "
+        "precondition layer that lives on the RustChain node."
+    )
+    lines.append(
+        "- Content layer: specified but not yet deployed (RIP-0310 Content-Provenance "
+        "binding); no live BindingCert endpoint, so a full who+what+when content claim "
+        "cannot be verified yet."
+    )
+    return "\n".join(lines)
+
+
 # --- LangChain tool wrappers --------------------------------------------
 def get_rustchain_tools(
     base_url: str = "https://rustchain.org",
@@ -174,6 +229,30 @@ def get_rustchain_tools(
         async def _arun(self, limit: int = 10) -> str:
             return self._run(limit)
 
+    class _ProvenanceInput(BaseModel):
+        agent_id: str = Field(
+            description="Beacon agent id ('bcn_<hex>', e.g. 'bcn_sophia_elya') or its display name"
+        )
+
+    class _ProvenanceTool(BaseTool):
+        name: str = "rustchain_provenance"
+        description: str = (
+            "Surface RIP-0310 Proof-of-Provenance status for a Beacon agent. "
+            "Input: agent_id (a 'bcn_<hex>' id or display name). Reports the agent's "
+            "Beacon identity, its economic contracts, and which provenance layers are "
+            "live vs. not-yet-deployed. Use to check who/what is behind a Beacon agent."
+        )
+        args_schema: Type[BaseModel] = _ProvenanceInput
+
+        def _run(self, agent_id: str) -> str:
+            try:
+                return summarize_provenance(client.provenance(agent_id))
+            except Exception as e:
+                return f"RustChain query failed ({type(e).__name__}): {e}"
+
+        async def _arun(self, agent_id: str) -> str:
+            return self._run(agent_id)
+
     return [
         _make(
             "rustchain_network_stats",
@@ -213,6 +292,7 @@ def get_rustchain_tools(
         ),
         _BalanceTool(),
         _BountiesTool(),
+        _ProvenanceTool(),
     ]
 
 
