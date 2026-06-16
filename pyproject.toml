@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "langchain-rustchain-tools"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read-only LangChain tools for RustChain — let any agent query the hardware-attested agent economy."
 readme = "README.md"
 requires-python = ">=3.9"
