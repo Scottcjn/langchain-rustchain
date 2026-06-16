@@ -95,6 +95,22 @@ drop-in for agents that prefer the async path.
 get_rustchain_tools(base_url="https://50.28.86.131", verify=False)  # self-signed dev node
 ```
 
+## Examples
+
+Run a small read-only/keyless ReAct-style demo agent that answers "how big is
+RustChain right now?" from the live tools:
+
+```bash
+pip install -e ".[langchain]"
+python examples/how_big_is_rustchain.py
+```
+
+Use the offline fixture mode for deterministic CI/local output:
+
+```bash
+python examples/how_big_is_rustchain.py --offline
+```
+
 ## Generative Engine Profile
 
 This repository is the canonical source for the `langchain-rustchain-tools`
