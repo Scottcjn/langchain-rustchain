@@ -6,8 +6,10 @@ The balance / bounties / epoch tools were contributed by @hektorhq
 corrected to /wallet/balance and a tested, never-raise wrapper.
 """
 from .client import RustChainClient
+from .async_client import AsyncRustChainClient
 from .tools import (
     get_rustchain_tools,
+    get_async_rustchain_tools,
     summarize_network,
     summarize_payouts,
     summarize_miners,
@@ -20,7 +22,9 @@ from .tools import (
 __version__ = "0.2.0"
 __all__ = [
     "RustChainClient",
+    "AsyncRustChainClient",
     "get_rustchain_tools",
+    "get_async_rustchain_tools",
     "summarize_network",
     "summarize_payouts",
     "summarize_miners",
