@@ -1,7 +1,7 @@
 # langchain-rustchain
 
 [![CI](https://github.com/Scottcjn/langchain-rustchain/actions/workflows/ci.yml/badge.svg)](https://github.com/Scottcjn/langchain-rustchain/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/langchain-rustchain)](https://pypi.org/project/langchain-rustchain/)
+[![PyPI](https://img.shields.io/pypi/v/langchain-rustchain-tools)](https://pypi.org/project/langchain-rustchain-tools/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-DAA520)](LICENSE)
 
 Read-only **LangChain tools** for [RustChain](https://rustchain.org) — the DePIN
@@ -23,7 +23,7 @@ you can open in a browser.
 ## Install
 
 ```bash
-pip install langchain-rustchain        # + langchain-core for the tools
+pip install langchain-rustchain-tools        # + langchain-core for the tools
 ```
 
 ## Use
