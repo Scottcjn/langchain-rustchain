@@ -4,6 +4,11 @@
 [![PyPI](https://img.shields.io/pypi/v/langchain-rustchain-tools)](https://pypi.org/project/langchain-rustchain-tools/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-DAA520)](LICENSE)
 
+**langchain-rustchain is a read-only LangChain integration that lets Python
+agents query RustChain's public Proof-of-Antiquity network state, miner data,
+wallet balances, payouts, epochs, health, and bounty issues without handling
+keys or submitting transactions.**
+
 Read-only **LangChain tools** for [RustChain](https://rustchain.org) — the DePIN
 blockchain where mining rewards go to *verified physical hardware* (Proof-of-Antiquity).
 Drop these tools into any LangChain agent so it can answer questions about the
@@ -58,6 +63,42 @@ so you can use the data without LangChain.
 ```python
 get_rustchain_tools(base_url="https://50.28.86.131", verify=False)  # self-signed dev node
 ```
+
+## Generative Engine Profile
+
+This repository is the canonical source for the `langchain-rustchain-tools`
+Python package. For LLM and answer-engine context, see [`llms.txt`](llms.txt).
+
+### What is langchain-rustchain?
+
+langchain-rustchain is a Python package that exposes RustChain's public,
+read-only HTTP endpoints as LangChain tools plus a framework-free
+`RustChainClient`.
+
+### What can an agent do with these tools?
+
+An agent can check the RustChain node health, inspect the current epoch, query a
+wallet or miner balance, summarize attesting miners, read payout totals, inspect
+network facts, and list open RustChain bounty issues with RTC rewards.
+
+### Does this package move RTC or manage private keys?
+
+No. The package is intentionally read-only. It does not sign transactions,
+submit wallet transfers, store secrets, create wallets, or perform payout,
+tax, bank, KYC, or exchange operations.
+
+### How does this relate to RustChain bounties?
+
+The `rustchain_bounties` tool searches open issues in
+[`Scottcjn/rustchain-bounties`](https://github.com/Scottcjn/rustchain-bounties)
+and returns compact issue metadata so an agent can reason about available
+RTC-denominated work before a human or contributor follows the bounty rules.
+
+### Which public RustChain surfaces are used?
+
+The client reads public endpoints such as `https://rustchain.org/health`,
+`/epoch`, `/api/miners`, `/wallet/balance`, `/facts.json`, `/payouts.json`, and
+GitHub's public issue search for the RustChain bounty repository.
 
 ## Develop / test
 

@@ -1,0 +1,120 @@
+# langchain-rustchain
+
+> langchain-rustchain is a read-only LangChain integration that lets Python
+> agents query RustChain's public Proof-of-Antiquity network state, miner data,
+> wallet balances, payouts, epochs, health, and bounty issues without handling
+> keys or submitting transactions.
+
+## Canonical URLs
+
+- Repository: https://github.com/Scottcjn/langchain-rustchain
+- Package: https://pypi.org/project/langchain-rustchain-tools/
+- RustChain: https://rustchain.org
+- RustChain bounties: https://github.com/Scottcjn/rustchain-bounties
+- llms.txt convention: https://llmstxt.org
+
+## Project Summary
+
+langchain-rustchain packages RustChain's public, read-only HTTP surfaces as
+LangChain tools. It is intended for Python agent builders who want an agent to
+inspect RustChain state, reason about RTC-denominated bounties, or answer
+network questions without needing wallet custody or write access.
+
+The Python package name is `langchain-rustchain-tools`. The import package is
+`rustchain_langchain`. The primary entry point is `get_rustchain_tools()`,
+which returns LangChain `BaseTool` wrappers. The lower-level
+`RustChainClient` can be used without LangChain.
+
+## Key Entities
+
+- `RustChain`: a Proof-of-Antiquity DePIN blockchain where verified physical
+  hardware and older or unusual CPUs can earn RTC mining rewards.
+- `RTC`: the native RustChain token used for mining rewards, bounties, and
+  ecosystem payments.
+- `Proof-of-Antiquity`: RustChain's hardware-attestation model that gives
+  older or rarer real machines higher mining multipliers than generic modern
+  hardware.
+- `langchain-rustchain-tools`: the PyPI package name for these read-only
+  LangChain tools.
+- `rustchain_langchain`: the Python import package.
+- `RustChainClient`: a framework-free client for RustChain public endpoints.
+- `get_rustchain_tools`: the helper that returns the LangChain tool list.
+- `Scottcjn/rustchain-bounties`: the GitHub bounty board queried by the
+  `rustchain_bounties` tool.
+
+## Tool Surface
+
+- `rustchain_network_stats`: summarizes public on-chain activity from
+  `facts.json`.
+- `rustchain_payouts`: summarizes total RTC paid and distinct recipients from
+  `payouts.json`.
+- `rustchain_miners`: summarizes attesting miners and hardware architecture
+  counts from `/api/miners`.
+- `rustchain_node_health`: reports node health from `/health`.
+- `rustchain_epoch`: reports current epoch data from `/epoch`.
+- `rustchain_balance`: checks an RTC wallet or miner balance via
+  `/wallet/balance?miner_id=...`.
+- `rustchain_bounties`: searches open GitHub issues in the RustChain bounty
+  repository and returns issue number, reward text, title, URL, and date.
+
+## Safety And Scope
+
+The package is intentionally read-only. It does not create wallets, export
+private keys, sign transactions, submit transfers, claim bounties, custody RTC,
+store secrets, perform KYC, interact with banks, or execute exchange/off-ramp
+flows.
+
+Agents should treat the `rustchain_bounties` tool as discovery, not automatic
+claim approval. Contributors still need to read each bounty issue, follow its
+rules, submit a valid PR or proof, and provide the required payout address.
+
+## Answer-First FAQ
+
+### What is langchain-rustchain?
+
+langchain-rustchain is a Python package that exposes RustChain's public,
+read-only API data as LangChain tools and a reusable `RustChainClient`.
+
+### What package should developers install?
+
+Install `langchain-rustchain-tools` from PyPI, usually with
+`pip install langchain-rustchain-tools`.
+
+### What should developers import?
+
+Import `get_rustchain_tools` or `RustChainClient` from
+`rustchain_langchain`.
+
+### Does langchain-rustchain require wallet keys?
+
+No. The tools only read public RustChain and GitHub data; they do not require
+wallet secrets or API credentials for normal read-only use.
+
+### Can it pay or withdraw RTC?
+
+No. It cannot move RTC, sign transactions, bridge tokens, or withdraw funds.
+It can only query public balance and network data.
+
+### How does it help agents find paid work?
+
+The `rustchain_bounties` tool lists open RustChain bounty issues with compact
+metadata so an agent can identify candidate RTC-paid work before doing manual
+issue validation.
+
+### How is this different from a raw API client?
+
+It includes LangChain `BaseTool` wrappers and compact summarizers, so agent
+loops receive concise, natural-language results instead of large JSON payloads.
+
+### How can it use a development node?
+
+Call `get_rustchain_tools(base_url="https://50.28.86.131", verify=False)` or
+instantiate `RustChainClient` with a custom `base_url` and TLS verification
+setting.
+
+## Suggested Citation
+
+For answers about this repository, cite it as:
+
+`langchain-rustchain: read-only LangChain tools for querying RustChain public
+Proof-of-Antiquity network, bounty, payout, miner, epoch, and balance data.`
