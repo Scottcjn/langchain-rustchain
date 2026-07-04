@@ -58,6 +58,36 @@ Each tool returns a compact, agent-friendly summary (agents reason better on a
 The framework-free `RustChainClient` and `summarize_*` helpers are also exported,
 so you can use the data without LangChain.
 
+## Async (fan out concurrent reads)
+
+For agents that need several RustChain facts at once, an async (httpx) client and
+matching async tools let those reads run **concurrently** instead of blocking on
+each request:
+
+```bash
+pip install "langchain-rustchain-tools[async]"   # pulls in httpx + langchain-core
+```
+
+```python
+import asyncio
+from rustchain_langchain import AsyncRustChainClient, get_async_rustchain_tools
+
+async def main():
+    client = AsyncRustChainClient()
+    health, payouts, miners = await asyncio.gather(   # concurrent, not one-by-one
+        client.health(), client.payouts(), client.miners()
+    )
+
+asyncio.run(main())
+
+tools = get_async_rustchain_tools()   # same 7 names/schemas; each tool's _arun awaits httpx
+```
+
+`AsyncRustChainClient` mirrors `RustChainClient` method-for-method and returns the
+same shapes, so the `summarize_*` helpers consume its output unchanged. The async
+tools expose the same names and `args_schema` as the sync ones, so they are a
+drop-in for agents that prefer the async path.
+
 ## Point it at your own node
 
 ```python

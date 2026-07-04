@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import List
 
 from .client import RustChainClient
+from .async_client import AsyncRustChainClient
 
 
 # --- pure summarizers (framework-free, unit-tested) ---------------------
@@ -212,4 +213,136 @@ def get_rustchain_tools(
         ),
         _BalanceTool(),
         _BountiesTool(),
+    ]
+
+
+def get_async_rustchain_tools(
+    base_url: str = "https://rustchain.org",
+    timeout: int = 15,
+    verify: bool = True,
+) -> List["object"]:
+    """Return the same RustChain tools backed by an async (httpx) client.
+
+    Identical names, descriptions, schemas and summaries as
+    :func:`get_rustchain_tools`, but each tool's ``_arun`` awaits
+    :class:`AsyncRustChainClient`, so an agent can issue several RustChain reads
+    concurrently (e.g. under ``asyncio.gather``) instead of one blocking request
+    at a time. ``_run`` bridges to the coroutine for sync callers when no event
+    loop is already running. Requires ``langchain-core`` (and ``httpx`` at call
+    time).
+    """
+    import asyncio
+
+    from langchain_core.tools import BaseTool  # lazy import
+    from pydantic import BaseModel, Field
+    from typing import Type
+
+    client = AsyncRustChainClient(base_url=base_url, timeout=timeout, verify=verify)
+
+    def _bridge(coro_factory, *args, **kwargs):
+        """Run an async tool body from a sync ``_run``: execute the coroutine
+        when no loop is spinning, otherwise tell the caller to use the async
+        path. Never raises into an agent loop."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro_factory(*args, **kwargs))
+        return (
+            "call this tool asynchronously (await ainvoke/_arun) — an event "
+            "loop is already running on this thread."
+        )
+
+    def _make(name: str, description: str, afetch, summarize):
+        class _AsyncTool(BaseTool):
+            async def _arun(self, *args, **kwargs) -> str:
+                try:
+                    return summarize(await afetch())
+                except Exception as e:  # never raise inside an agent loop
+                    return f"RustChain query failed ({type(e).__name__}): {e}"
+
+            def _run(self, *args, **kwargs) -> str:
+                return _bridge(self._arun, *args, **kwargs)
+
+        return _AsyncTool(name=name, description=description)
+
+    # --- argument-taking async tools (balance, bounties) ----------------
+    class _WalletInput(BaseModel):
+        miner_id: str = Field(description="Wallet address or miner id to query, e.g. 'dual-g4-125'")
+
+    class _AsyncBalanceTool(BaseTool):
+        name: str = "rustchain_balance"
+        description: str = (
+            "Check the RTC balance of a RustChain wallet/miner. "
+            "Input: miner_id (a wallet address or miner id)."
+        )
+        args_schema: Type[BaseModel] = _WalletInput
+
+        async def _arun(self, miner_id: str) -> str:
+            try:
+                return summarize_balance(await client.balance(miner_id))
+            except Exception as e:
+                return f"RustChain query failed ({type(e).__name__}): {e}"
+
+        def _run(self, miner_id: str) -> str:
+            return _bridge(self._arun, miner_id)
+
+    class _BountyInput(BaseModel):
+        limit: int = Field(default=10, description="Max bounties to return (1-50)")
+
+    class _AsyncBountiesTool(BaseTool):
+        name: str = "rustchain_bounties"
+        description: str = (
+            "List open RustChain bounties (GitHub issues with RTC rewards). "
+            "Input: limit (default 10). Returns number, reward, title, URL."
+        )
+        args_schema: Type[BaseModel] = _BountyInput
+
+        async def _arun(self, limit: int = 10) -> str:
+            try:
+                return summarize_bounties(await client.bounties(limit))
+            except Exception as e:
+                return f"RustChain query failed ({type(e).__name__}): {e}"
+
+        def _run(self, limit: int = 10) -> str:
+            return _bridge(self._arun, limit)
+
+    return [
+        _make(
+            "rustchain_network_stats",
+            "Get RustChain's live on-chain activity (wallet transfers, RTC moved, "
+            "distinct wallets). Use when asked about RustChain network activity or size.",
+            client.network_stats,
+            summarize_network,
+        ),
+        _make(
+            "rustchain_payouts",
+            "Get total RTC paid out and the number of distinct recipients on RustChain. "
+            "Use for questions about how much RustChain has paid contributors/miners.",
+            client.payouts,
+            summarize_payouts,
+        ),
+        _make(
+            "rustchain_miners",
+            "Get the current attesting miners and a breakdown by hardware architecture "
+            "(PowerPC G4/G5, POWER8, x86, Apple Silicon, etc.). Use for questions about "
+            "who is mining or what hardware is on the network.",
+            client.miners,
+            summarize_miners,
+        ),
+        _make(
+            "rustchain_node_health",
+            "Check whether the RustChain node is healthy (ok, db read-write, version, "
+            "backup age). Use to verify the network is up before relying on it.",
+            client.health,
+            summarize_health,
+        ),
+        _make(
+            "rustchain_epoch",
+            "Get the current RustChain epoch: number, slot, enrolled miners, epoch "
+            "reward pot, and total supply. Use for questions about the current mining round.",
+            client.epoch,
+            summarize_epoch,
+        ),
+        _AsyncBalanceTool(),
+        _AsyncBountiesTool(),
     ]

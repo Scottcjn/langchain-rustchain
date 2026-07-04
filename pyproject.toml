@@ -21,7 +21,12 @@ dependencies = ["requests>=2.28"]
 
 [project.optional-dependencies]
 langchain = ["langchain-core>=0.2"]
-test = ["pytest>=7", "langchain-core>=0.2"]
+# The async tools build on langchain-core + pydantic (BaseTool/args_schema),
+# so the async extra pulls those in too — the documented
+# `pip install "...[async]"` then `get_async_rustchain_tools()` path works on
+# its own without also requiring the `langchain` extra.
+async = ["httpx>=0.24", "langchain-core>=0.2"]
+test = ["pytest>=7", "langchain-core>=0.2", "httpx>=0.24"]
 
 [project.urls]
 Homepage = "https://rustchain.org"
