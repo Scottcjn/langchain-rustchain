@@ -386,6 +386,30 @@ def get_async_rustchain_tools(
         def _run(self, limit: int = 10) -> str:
             return _bridge(self._arun, limit)
 
+    class _ProvenanceInput(BaseModel):
+        agent_id: str = Field(
+            description="Beacon agent id ('bcn_<hex>', e.g. 'bcn_sophia_elya') or its display name"
+        )
+
+    class _AsyncProvenanceTool(BaseTool):
+        name: str = "rustchain_provenance"
+        description: str = (
+            "Surface RIP-0310 Proof-of-Provenance status for a Beacon agent. "
+            "Input: agent_id (a 'bcn_<hex>' id or display name). Reports the agent's "
+            "Beacon identity, its economic contracts, and which provenance layers are "
+            "live vs. not-yet-deployed. Use to check who/what is behind a Beacon agent."
+        )
+        args_schema: Type[BaseModel] = _ProvenanceInput
+
+        async def _arun(self, agent_id: str) -> str:
+            try:
+                return summarize_provenance(await client.provenance(agent_id))
+            except Exception as e:
+                return f"RustChain query failed ({type(e).__name__}): {e}"
+
+        def _run(self, agent_id: str) -> str:
+            return _bridge(self._arun, agent_id)
+
     return [
         _make(
             "rustchain_network_stats",
@@ -425,4 +449,5 @@ def get_async_rustchain_tools(
         ),
         _AsyncBalanceTool(),
         _AsyncBountiesTool(),
+        _AsyncProvenanceTool(),
     ]

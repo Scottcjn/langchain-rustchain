@@ -35,3 +35,12 @@ Repository = "https://github.com/Scottcjn/langchain-rustchain"
 
 [tool.setuptools.packages.find]
 include = ["rustchain_langchain*"]
+
+[tool.pytest.ini_options]
+# tests/test_examples.py imports the top-level `examples` package directly
+# from the checkout (examples/ is not part of the installed distribution,
+# on purpose — it's a runnable demo, not library code). Without this, a
+# clean `pip install -e .` + `pytest` env (like CI) can't find it, even
+# though it happens to resolve locally for anyone with the repo root
+# already on PYTHONPATH.
+pythonpath = ["."]

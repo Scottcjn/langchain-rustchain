@@ -113,3 +113,55 @@ class AsyncRustChainClient:
             items = resp.json().get("items", [])[:limit]
 
         return [_reshape_bounty(it) for it in items]
+
+    async def beacon_agents(self) -> list:
+        """Registered Beacon agent-identity cards (id ``bcn_<hex>``, name, status)."""
+        data = await self._get_json("/beacon/api/agents")
+        return data if isinstance(data, list) else []
+
+    async def beacon_contracts(self) -> list:
+        """Open Beacon economic contracts (leases/offers between agents)."""
+        data = await self._get_json("/beacon/api/contracts")
+        return data if isinstance(data, list) else []
+
+    async def provenance(self, agent_id: str) -> dict:
+        """RIP-0310 Proof-of-Provenance status for a Beacon agent id.
+
+        Async twin of :meth:`RustChainClient.provenance` — composes the same
+        Agent (identity) and Economic (contracts) layer signals, same shape.
+        """
+        agent_id = (agent_id or "").strip()
+        agents = await self.beacon_agents()
+        card = next((a for a in agents if a.get("agent_id") == agent_id), None)
+        if card is None:
+            # tolerate being given a display name instead of a bcn_ id
+            card = next(
+                (a for a in agents
+                 if (a.get("name") or "").lower() == agent_id.lower()),
+                None,
+            )
+
+        contracts = []
+        if card is not None:
+            aid = card.get("agent_id")
+            for c in await self.beacon_contracts():
+                if c.get("from") == aid or c.get("to") == aid:
+                    role = "payer" if c.get("from") == aid else "payee"
+                    other = c.get("to") if role == "payer" else c.get("from")
+                    contracts.append({
+                        "id": c.get("id"),
+                        "type": c.get("type"),
+                        "amount": c.get("amount"),
+                        "currency": c.get("currency"),
+                        "state": c.get("state"),
+                        "role": role,
+                        "counterparty": other,
+                    })
+
+        return {
+            "agent_id": agent_id,
+            "found": card is not None,
+            "registered_agents": len(agents),
+            "identity": card,
+            "contracts": contracts,
+        }
