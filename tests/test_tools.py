@@ -12,6 +12,7 @@ from rustchain_langchain import (
     summarize_balance,
     summarize_epoch,
     summarize_bounties,
+    summarize_hall_of_fame,
     summarize_provenance,
 )
 
@@ -442,3 +443,100 @@ def test_provenance_tool_never_raises():
     with mock.patch("rustchain_langchain.client.requests.get", side_effect=RuntimeError("boom")):
         out = tool._run("bcn_x")
     assert "RustChain query failed" in out
+
+
+# --- hall of fame (oldest / most-prized attesting hardware) --------------
+# first_attest 1_700_000_000 -> 2023-11-14; +864000s == 10 whole days later.
+_MINERS_HALL = {"miners": [
+    {"miner": "RTCyoung", "device_family": "ARM", "device_arch": "aarch64",
+     "hardware_type": "Unknown/Other", "antiquity_multiplier": 0.0005,
+     "first_attest": 1_782_000_000, "last_attest": 1_782_086_400},
+    {"miner": "RTColdest_powerpc_g4_00000000000000000000",
+     "device_family": "PowerPC", "device_arch": "ppc", "hardware_type": "Power Mac G4",
+     "antiquity_multiplier": 3.0, "first_attest": 1_700_000_000,
+     "last_attest": 1_700_864_000},
+    {"miner": "RTCg5", "device_family": "PowerPC", "device_arch": "ppc64",
+     "hardware_type": "Power Mac G5", "antiquity_multiplier": 3.0,
+     "first_attest": 1_710_000_000, "last_attest": 1_710_000_000},
+]}
+
+
+def test_reshape_hall_ranks_by_antiquity_then_age():
+    from rustchain_langchain.client import _reshape_hall
+    out = _reshape_hall(_MINERS_HALL)
+    # highest antiquity first; the two ×3.0 tie broken by earliest first_attest
+    assert [m["miner"] for m in out] == [
+        "RTColdest_powerpc_g4_00000000000000000000", "RTCg5", "RTCyoung"]
+    assert [m["rank"] for m in out] == [1, 2, 3]
+    top = out[0]
+    assert top["device"] == "PowerPC" and top["hardware"] == "Power Mac G4"
+    assert top["first_attest"] == "2023-11-14"  # UTC day of first_attest
+    assert top["days_attesting"] == 10  # (last-first)//86400
+
+
+def test_reshape_hall_respects_limit_and_tolerates_junk():
+    from rustchain_langchain.client import _reshape_hall
+    assert _reshape_hall(_MINERS_HALL, limit=1)[0]["rank"] == 1
+    assert len(_reshape_hall(_MINERS_HALL, limit=1)) == 1
+    assert _reshape_hall({}) == []
+    assert _reshape_hall([{"miner": "x"}])[0]["days_attesting"] is None  # no timestamps
+
+
+def test_summarize_hall_of_fame():
+    from rustchain_langchain.client import _reshape_hall
+    s = summarize_hall_of_fame(_reshape_hall(_MINERS_HALL))
+    assert "hall of fame" in s and "3 oldest" in s
+    assert "Power Mac G4" in s and "antiquity ×3.0" in s
+    assert "#1 RTColdest" in s  # long id is shortened but recognisable
+
+
+def test_summarize_hall_of_fame_empty():
+    assert "No RustChain hall-of-fame" in summarize_hall_of_fame([])
+
+
+def test_client_hall_of_fame_reads_miners_endpoint():
+    c = RustChainClient(base_url="https://example.test")
+    with mock.patch("rustchain_langchain.client.requests.get",
+                    return_value=_Resp(_MINERS_HALL)) as g:
+        out = c.hall_of_fame(limit=2)
+    assert g.call_args[0][0] == "https://example.test/api/miners"  # keyless surface
+    assert [m["miner"] for m in out] == [
+        "RTColdest_powerpc_g4_00000000000000000000", "RTCg5"]
+
+
+def test_sync_and_async_hall_share_canonical_shape():
+    sync_c = RustChainClient(base_url="https://example.test")
+    with mock.patch("rustchain_langchain.client.requests.get",
+                    return_value=_Resp(_MINERS_HALL)):
+        sync_out = sync_c.hall_of_fame(limit=5)
+    async_c = AsyncRustChainClient(base_url="https://example.test")
+    with mock.patch("httpx.AsyncClient", _fake_async_client(_MINERS_HALL)):
+        async_out = asyncio.run(async_c.hall_of_fame(limit=5))
+    assert sync_out == async_out
+
+
+def test_hall_tool_run_and_never_raises():
+    try:
+        from rustchain_langchain import get_rustchain_tools
+        tools = get_rustchain_tools(base_url="https://example.test")
+    except (ImportError, ModuleNotFoundError):
+        return
+    tool = next(t for t in tools if t.name == "rustchain_hall_of_fame")
+    with mock.patch("rustchain_langchain.client.requests.get",
+                    return_value=_Resp(_MINERS_HALL)):
+        out = tool._run(limit=3)
+    assert "hall of fame" in out and "Power Mac G4" in out
+    with mock.patch("rustchain_langchain.client.requests.get", side_effect=RuntimeError("boom")):
+        assert "RustChain query failed" in tool._run()
+
+
+def test_async_hall_tool_arun():
+    try:
+        from rustchain_langchain import get_async_rustchain_tools
+        tools = get_async_rustchain_tools(base_url="https://example.test")
+    except (ImportError, ModuleNotFoundError):
+        return
+    tool = next(t for t in tools if t.name == "rustchain_hall_of_fame")
+    with mock.patch("httpx.AsyncClient", _fake_async_client(_MINERS_HALL)):
+        out = asyncio.run(tool._arun(limit=3))
+    assert "hall of fame" in out and "Power Mac G4" in out

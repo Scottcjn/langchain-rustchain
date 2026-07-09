@@ -54,6 +54,7 @@ Each tool returns a compact, agent-friendly summary (agents reason better on a
 | `rustchain_epoch` | current epoch: number, slot, enrolled miners, reward pot, supply |
 | `rustchain_balance` | RTC balance for a wallet/miner (arg: `miner_id`) |
 | `rustchain_bounties` | open RustChain bounties with RTC rewards (arg: `limit`) |
+| `rustchain_hall_of_fame` | oldest / most-prized attesting hardware, ranked by antiquity (arg: `limit`) |
 | `rustchain_provenance` | RIP-0310 Proof-of-Provenance status for a Beacon agent (arg: `agent_id`) |
 
 The framework-free `RustChainClient` and `summarize_*` helpers are also exported,

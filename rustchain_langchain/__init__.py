@@ -17,10 +17,11 @@ from .tools import (
     summarize_balance,
     summarize_epoch,
     summarize_bounties,
+    summarize_hall_of_fame,
     summarize_provenance,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = [
     "RustChainClient",
     "AsyncRustChainClient",
@@ -33,5 +34,6 @@ __all__ = [
     "summarize_balance",
     "summarize_epoch",
     "summarize_bounties",
+    "summarize_hall_of_fame",
     "summarize_provenance",
 ]
