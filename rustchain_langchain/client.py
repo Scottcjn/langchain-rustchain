@@ -9,6 +9,7 @@ framework-free so it can be tested (and reused) without LangChain installed.
 """
 from __future__ import annotations
 
+import datetime
 import re
 
 import requests
@@ -69,6 +70,73 @@ def _bounties_search_url(limit: int) -> str:
         f"q={BOUNTIES_SEARCH_QUERY}&"
         f"per_page={limit}&sort=created&order=desc"
     )
+
+
+# --- canonical hall-of-fame contract (shared by sync + async clients) ----
+# RustChain rewards antiquity: the older / rarer the attesting hardware, the
+# higher its multiplier. The hall of fame is the leaderboard of that — and it
+# is derived from the *keyless* /api/miners surface (the /hall/leaderboard
+# endpoint is auth-gated, which would break the package's read-only / keyless
+# contract), so both clients funnel the same miner list through one reshape and
+# return byte-identical output.
+def _as_float(v) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _as_int(v) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _reshape_hall(miners, limit: int = 10) -> list:
+    """Rank attesting miners into a hall of fame — oldest / most-prized first.
+
+    Accepts the raw ``/api/miners`` payload (``{"miners": [...]}`` or a bare
+    list), ranks by antiquity multiplier (the chain's own reward for age/rarity)
+    with the earliest first-attestation breaking ties, and returns the canonical
+    ``{rank, miner, device, hardware, antiquity_multiplier, first_attest,
+    days_attesting}`` shape. ``first_attest`` is a ``YYYY-MM-DD`` day (or
+    ``None``); ``days_attesting`` is the whole-day span between first and last
+    attestation (or ``None`` when unknown).
+    """
+    if isinstance(miners, dict):
+        miners = miners.get("miners", [])
+    if not isinstance(miners, list):
+        miners = []
+    limit = max(1, min(int(limit), 50))
+
+    # highest antiquity first; older machine (smaller first_attest) breaks ties
+    ranked = sorted(
+        miners,
+        key=lambda m: (-_as_float(m.get("antiquity_multiplier")),
+                       _as_int(m.get("first_attest")) or 1 << 62),
+    )[:limit]
+
+    out = []
+    for i, m in enumerate(ranked, 1):
+        first = _as_int(m.get("first_attest"))
+        last = _as_int(m.get("last_attest"))
+        days = max(0, (last - first) // 86400) if first and last else None
+        first_day = (
+            datetime.datetime.fromtimestamp(
+                first, datetime.timezone.utc).strftime("%Y-%m-%d")
+            if first else None
+        )
+        out.append({
+            "rank": i,
+            "miner": m.get("miner"),
+            "device": m.get("device_family") or m.get("device_arch") or "unknown",
+            "hardware": m.get("hardware_type") or "Unknown/Other",
+            "antiquity_multiplier": m.get("antiquity_multiplier"),
+            "first_attest": first_day,
+            "days_attesting": days,
+        })
+    return out
 
 
 class RustChainClient:
@@ -150,6 +218,16 @@ class RustChainClient:
         resp.raise_for_status()
         items = resp.json().get("items", [])[:limit]
         return [_reshape_bounty(it) for it in items]
+
+    def hall_of_fame(self, limit: int = 10) -> list:
+        """RustChain hall of fame — the oldest / most-prized attesting hardware.
+
+        Keyless: derived from the public ``/api/miners`` surface and ranked by
+        antiquity multiplier (the ``/hall/leaderboard`` endpoint is auth-gated).
+        Returns the shared :func:`_reshape_hall` contract, so the async client
+        returns the identical list.
+        """
+        return _reshape_hall(self.miners(), limit)
 
     def beacon_agents(self) -> list:
         """Registered Beacon agent-identity cards (id ``bcn_<hex>``, name, status)."""

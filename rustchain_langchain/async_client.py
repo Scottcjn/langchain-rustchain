@@ -3,7 +3,7 @@
 
 The ``async`` twin of :class:`rustchain_langchain.client.RustChainClient`. It
 exposes the same read-only, keyless surfaces (network stats, payouts, miners,
-health, wallet balance, epoch, bounties) but every call is a coroutine backed by
+health, wallet balance, epoch, bounties, hall of fame) but every call is a coroutine backed by
 ``httpx.AsyncClient`` — so an agent can fan out several RustChain reads
 concurrently with ``asyncio.gather(...)`` instead of blocking on each one.
 
@@ -20,6 +20,7 @@ from .client import (
     DEFAULT_TIMEOUT,
     _bounties_search_url,
     _reshape_bounty,
+    _reshape_hall,
 )
 
 
@@ -113,6 +114,15 @@ class AsyncRustChainClient:
             items = resp.json().get("items", [])[:limit]
 
         return [_reshape_bounty(it) for it in items]
+
+    async def hall_of_fame(self, limit: int = 10) -> list:
+        """RustChain hall of fame — the oldest / most-prized attesting hardware.
+
+        Async twin of :meth:`RustChainClient.hall_of_fame` — reads the keyless
+        ``/api/miners`` surface and ranks it through the shared
+        :func:`_reshape_hall`, so its output is byte-identical to the sync client.
+        """
+        return _reshape_hall(await self.miners(), limit)
 
     async def beacon_agents(self) -> list:
         """Registered Beacon agent-identity cards (id ``bcn_<hex>``, name, status)."""

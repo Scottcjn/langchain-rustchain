@@ -103,6 +103,23 @@ def summarize_bounties(items) -> str:
     return "\n".join(lines)
 
 
+def summarize_hall_of_fame(items) -> str:
+    if not isinstance(items, list) or not items:
+        return "No RustChain hall-of-fame machines found."
+    lines = [f"RustChain hall of fame — {len(items)} oldest / most-prized machine(s):"]
+    for m in items:
+        mid = m.get("miner") or "?"
+        short = f"{mid[:10]}…" if len(mid) > 12 else mid
+        since = f" since {m.get('first_attest')}" if m.get("first_attest") else ""
+        days = m.get("days_attesting")
+        span = f", attesting {days}d" if days is not None else ""
+        lines.append(
+            f"- #{m.get('rank')} {short} — {m.get('device')} / {m.get('hardware')}, "
+            f"antiquity ×{m.get('antiquity_multiplier')}{since}{span}."
+        )
+    return "\n".join(lines)
+
+
 def summarize_provenance(data: dict) -> str:
     """Render RIP-0310 Proof-of-Provenance status for a Beacon agent id.
 
@@ -229,6 +246,27 @@ def get_rustchain_tools(
         async def _arun(self, limit: int = 10) -> str:
             return self._run(limit)
 
+    class _HallInput(BaseModel):
+        limit: int = Field(default=10, description="How many top machines to return (1-50)")
+
+    class _HallTool(BaseTool):
+        name: str = "rustchain_hall_of_fame"
+        description: str = (
+            "List the RustChain hall of fame — the oldest / most-prized attesting "
+            "machines, ranked by antiquity multiplier. Input: limit (default 10). "
+            "Use for questions about the rarest/oldest hardware or the antiquity leaderboard."
+        )
+        args_schema: Type[BaseModel] = _HallInput
+
+        def _run(self, limit: int = 10) -> str:
+            try:
+                return summarize_hall_of_fame(client.hall_of_fame(limit))
+            except Exception as e:
+                return f"RustChain query failed ({type(e).__name__}): {e}"
+
+        async def _arun(self, limit: int = 10) -> str:
+            return self._run(limit)
+
     class _ProvenanceInput(BaseModel):
         agent_id: str = Field(
             description="Beacon agent id ('bcn_<hex>', e.g. 'bcn_sophia_elya') or its display name"
@@ -292,6 +330,7 @@ def get_rustchain_tools(
         ),
         _BalanceTool(),
         _BountiesTool(),
+        _HallTool(),
         _ProvenanceTool(),
     ]
 
@@ -386,6 +425,27 @@ def get_async_rustchain_tools(
         def _run(self, limit: int = 10) -> str:
             return _bridge(self._arun, limit)
 
+    class _HallInput(BaseModel):
+        limit: int = Field(default=10, description="How many top machines to return (1-50)")
+
+    class _AsyncHallTool(BaseTool):
+        name: str = "rustchain_hall_of_fame"
+        description: str = (
+            "List the RustChain hall of fame — the oldest / most-prized attesting "
+            "machines, ranked by antiquity multiplier. Input: limit (default 10). "
+            "Use for questions about the rarest/oldest hardware or the antiquity leaderboard."
+        )
+        args_schema: Type[BaseModel] = _HallInput
+
+        async def _arun(self, limit: int = 10) -> str:
+            try:
+                return summarize_hall_of_fame(await client.hall_of_fame(limit))
+            except Exception as e:
+                return f"RustChain query failed ({type(e).__name__}): {e}"
+
+        def _run(self, limit: int = 10) -> str:
+            return _bridge(self._arun, limit)
+
     class _ProvenanceInput(BaseModel):
         agent_id: str = Field(
             description="Beacon agent id ('bcn_<hex>', e.g. 'bcn_sophia_elya') or its display name"
@@ -449,5 +509,6 @@ def get_async_rustchain_tools(
         ),
         _AsyncBalanceTool(),
         _AsyncBountiesTool(),
+        _AsyncHallTool(),
         _AsyncProvenanceTool(),
     ]
