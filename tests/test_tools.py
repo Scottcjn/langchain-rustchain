@@ -135,3 +135,27 @@ def test_client_balance_uses_wallet_balance_endpoint():
         out = c.balance("x")
     assert out["amount_rtc"] == 5.0
     assert g.call_args[0][0] == "https://example.test/wallet/balance"  # NOT bare /balance
+
+
+def test_bounties_reward_parse_decimal_and_thousands():
+    # Real open bounty bodies carry decimals ("2.5 RTC") and large grouped
+    # amounts ("3,333 RTC"). The bare \d+ parser dropped the decimal ("2.5" ->
+    # "5") and the leading groups ("3,333" -> "333"). Guard the real amount.
+    payload = {"items": [
+        {"number": 1, "title": "small", "body": "**Rate:** 2.5 RTC (micro)",
+         "html_url": "u1", "created_at": "2026-07-22T00:00:00Z"},
+        {"number": 2, "title": "big", "body": "Founding 100 miners — 3,333 RTC pool",
+         "html_url": "u2", "created_at": "2026-07-22T00:00:00Z"},
+        {"number": 3, "title": "plain", "body": "Rate: 12 RTC",
+         "html_url": "u3", "created_at": "2026-07-22T00:00:00Z"},
+        {"number": 4, "title": "none", "body": "no amount here",
+         "html_url": "u4", "created_at": "2026-07-22T00:00:00Z"},
+    ]}
+    c = RustChainClient(base_url="https://example.test")
+    with mock.patch("rustchain_langchain.client.requests.get", return_value=_Resp(payload)):
+        out = c.bounties(limit=10)
+    rewards = {b["number"]: b["reward"] for b in out}
+    assert rewards[1] == "2.5 RTC"   # was "5 RTC"
+    assert rewards[2] == "3333 RTC"  # was "333 RTC"
+    assert rewards[3] == "12 RTC"    # unchanged
+    assert rewards[4] == "see issue"

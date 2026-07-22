@@ -100,11 +100,15 @@ class RustChainClient:
         out = []
         for it in items:
             body = it.get("body", "") or ""
-            m = re.search(r"(\d+)\s*RTC", body)
+            # Allow decimals and thousands separators: "2.5 RTC" and
+            # "3,333 RTC" must not degrade to "5 RTC" / "333 RTC". The bare
+            # \d+ regex only captured the digit run touching "RTC", so any
+            # amount with a "." or "," before it was silently wrong.
+            m = re.search(r"(\d[\d,]*(?:\.\d+)?)\s*RTC", body)
             out.append({
                 "number": it.get("number"),
                 "title": (it.get("title") or "")[:100],
-                "reward": f"{m.group(1)} RTC" if m else "see issue",
+                "reward": f"{m.group(1).replace(',', '')} RTC" if m else "see issue",
                 "url": it.get("html_url"),
                 "created": (it.get("created_at") or "")[:10],
             })
